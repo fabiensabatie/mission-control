@@ -229,9 +229,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       completionInstructions = `**IMPORTANT:** After completing work, you MUST call these APIs:
 1. Log activity: POST ${missionControlUrl}/api/tasks/${task.id}/activities
    Body: {"activity_type": "completed", "message": "Description of what was done"}
-2. Register deliverable: POST ${missionControlUrl}/api/tasks/${task.id}/deliverables
-   Body: {"deliverable_type": "file", "title": "File name", "path": "${taskProjectDir}/filename.html"}
-3. Update status: PATCH ${missionControlUrl}/api/tasks/${task.id}
+2. Upload EACH deliverable file to Mission Control storage: POST ${missionControlUrl}/api/files/upload
+   Body: {"relativePath": "${projectDir}/filename.ext", "content": "FULL_FILE_TEXT_CONTENT"}
+   Save the JSON response field "path" as uploadedPath.
+3. Register deliverable using uploadedPath: POST ${missionControlUrl}/api/tasks/${task.id}/deliverables
+   Body: {"deliverable_type": "file", "title": "File name", "path": uploadedPath}
+4. Update status: PATCH ${missionControlUrl}/api/tasks/${task.id}
    Body: {"status": "${nextStatus}"}
 
 When complete, reply with:
@@ -284,7 +287,7 @@ ${task.description ? `**Description:** ${task.description}\n` : ''}
 ${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
 **Task ID:** ${task.id}
 ${planningSpecSection}${agentInstructionsSection}${knowledgeSection}
-${isBuilder ? `**OUTPUT DIRECTORY:** ${taskProjectDir}\nCreate this directory and save all deliverables there.\n` : `**OUTPUT DIRECTORY:** ${taskProjectDir}\n`}
+${isBuilder ? `**WORKING OUTPUT DIRECTORY:** ${taskProjectDir}\nYou may work locally there, but final file deliverables MUST be uploaded to Mission Control via /api/files/upload before registering deliverables.\n` : `**OUTPUT DIRECTORY:** ${taskProjectDir}\n`}
 ${completionInstructions}
 
 If you need help or clarification, ask the orchestrator.`;
