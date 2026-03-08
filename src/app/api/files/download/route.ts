@@ -15,6 +15,20 @@ export const dynamic = 'force-dynamic';
 // Set via PROJECTS_PATH env var (e.g., ~/projects or /var/www/projects)
 const PROJECTS_BASE = (process.env.PROJECTS_PATH || '~/projects').replace(/^~/, process.env.HOME || '');
 
+function sanitizePathInput(input: string): string {
+  return input.trim().replace(/^["'`]|["'`]$/g, '');
+}
+
+function extractRelativeFromProjectsPath(inputPath: string): string | null {
+  const normalized = inputPath.replace(/\\/g, '/');
+  const marker = '/projects/';
+  const idx = normalized.lastIndexOf(marker);
+  if (idx === -1) return null;
+
+  const relative = normalized.slice(idx + marker.length).replace(/^\/+/, '');
+  return relative || null;
+}
+
 // MIME types for common file extensions
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -52,13 +66,24 @@ export async function GET(request: NextRequest) {
 
     // Determine the target path
     let targetPath: string;
+    const attemptedPaths: string[] = [];
 
     if (fullPathParam) {
-      // Full path provided - validate it's under PROJECTS_BASE
-      targetPath = path.normalize(fullPathParam);
+      // Full path provided - try absolute path first, then PROJECTS_BASE fallback
+      const sanitizedFullPath = sanitizePathInput(fullPathParam);
+      const absoluteCandidate = path.normalize(sanitizedFullPath);
+      attemptedPaths.push(absoluteCandidate);
+
+      const derivedRelative = extractRelativeFromProjectsPath(sanitizedFullPath);
+      if (derivedRelative) {
+        attemptedPaths.push(path.join(PROJECTS_BASE, path.normalize(derivedRelative)));
+      }
+
+      const existing = attemptedPaths.find((candidate) => existsSync(candidate));
+      targetPath = existing || absoluteCandidate;
     } else if (relativePathParam) {
       // Relative path provided
-      const normalizedRelative = path.normalize(relativePathParam);
+      const normalizedRelative = path.normalize(sanitizePathInput(relativePathParam));
       if (normalizedRelative.startsWith('..') || normalizedRelative.startsWith('/')) {
         return NextResponse.json(
           { error: 'Invalid path: must be relative and cannot traverse upward' },
@@ -66,6 +91,7 @@ export async function GET(request: NextRequest) {
         );
       }
       targetPath = path.join(PROJECTS_BASE, normalizedRelative);
+      attemptedPaths.push(targetPath);
     } else {
       return NextResponse.json(
         { error: 'Either path or relativePath query parameter is required' },
@@ -76,7 +102,12 @@ export async function GET(request: NextRequest) {
     // Check file exists
     if (!existsSync(targetPath)) {
       return NextResponse.json(
-        { error: 'File not found' },
+        {
+          error: 'File not found',
+          requestedPath: fullPathParam || relativePathParam,
+          projectsBase: PROJECTS_BASE,
+          attemptedPaths,
+        },
         { status: 404 }
       );
     }
