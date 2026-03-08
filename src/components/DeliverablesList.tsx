@@ -49,48 +49,17 @@ export function DeliverablesList({ taskId }: DeliverablesListProps) {
     }
   };
 
-  const handleOpen = async (deliverable: TaskDeliverable) => {
+  const handleOpen = (deliverable: TaskDeliverable) => {
     // URLs open directly in new tab
     if (deliverable.deliverable_type === 'url' && deliverable.path) {
       window.open(deliverable.path, '_blank');
       return;
     }
 
-    // Files - try to open in Finder
+    // Files/artifacts - open via download link proxy
     if (deliverable.path) {
-      try {
-        debug.file('Opening file in Finder', { path: deliverable.path });
-        const res = await fetch('/api/files/reveal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath: deliverable.path }),
-        });
-
-        if (res.ok) {
-          debug.file('Opened in Finder successfully');
-          return;
-        }
-
-        const error = await res.json();
-        debug.file('Failed to open', error);
-
-        if (res.status === 404) {
-          alert(`File not found:\n${deliverable.path}\n\nThe file may have been moved or deleted.`);
-        } else if (res.status === 403) {
-          alert(`Cannot open this location:\n${deliverable.path}\n\nPath is outside allowed directories.`);
-        } else {
-          throw new Error(error.error || 'Unknown error');
-        }
-      } catch (error) {
-        console.error('Failed to open file:', error);
-        // Fallback: copy path to clipboard
-        try {
-          await navigator.clipboard.writeText(deliverable.path);
-          alert(`Could not open Finder. Path copied to clipboard:\n${deliverable.path}`);
-        } catch {
-          alert(`File path:\n${deliverable.path}`);
-        }
-      }
+      debug.file('Opening file via link proxy', { path: deliverable.path });
+      window.open(`/api/files/link?path=${encodeURIComponent(deliverable.path)}`, '_blank');
     }
   };
 
@@ -173,7 +142,7 @@ export function DeliverablesList({ taskId }: DeliverablesListProps) {
                   <button
                     onClick={() => handleOpen(deliverable)}
                     className="flex-shrink-0 p-1.5 hover:bg-mc-bg-tertiary rounded text-mc-accent"
-                    title={deliverable.deliverable_type === 'url' ? 'Open URL' : 'Reveal in Finder'}
+                    title={deliverable.deliverable_type === 'url' ? 'Open URL' : 'Open file'}
                   >
                     <ExternalLink className="w-4 h-4" />
                   </button>
